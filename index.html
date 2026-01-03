@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>シフト管理システム - 杉本様ほか</title>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, sans-serif; margin: 20px; background: #f8f9fa; color: #333; }
+        .container { max-width: 1100px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1, h2, h3 { text-align: center; color: #2c3e50; }
+        
+        .member-management { background: #e9ecef; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .member-input { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; }
+        .member-list { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+        .member-chip { background: #007bff; color: white; padding: 6px 15px; border-radius: 20px; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+        .member-chip button { background: none; border: none; color: white; cursor: pointer; font-weight: bold; font-size: 16px; padding: 0; }
+        .txt-input { padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; width: 150px; }
+
+        .config-section { background: #f1f3f5; padding: 15px; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: center; margin-bottom: 20px; }
+        select, input[type="number"] { padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 16px; }
+
+        .table-wrapper { overflow-x: auto; margin-bottom: 20px; border: 1px solid #dee2e6; border-radius: 4px; }
+        table { border-collapse: collapse; width: 100%; text-align: center; background: white; min-width: 600px; }
+        th, td { border: 1px solid #dee2e6; padding: 10px; font-size: 13px; }
+        th { background: #f1f3f5; position: sticky; top: 0; z-index: 10; }
+        .sticky-date { position: sticky; left: 0; background: #f1f3f5; font-weight: bold; z-index: 5; }
+
+        .sat { color: #007bff; background: #e7f1ff; }
+        .sun, .hol { color: #dc3545; background: #f8d7da; }
+        .work-cell { color: #28a745; font-weight: bold; }
+        .off-cell { color: #adb5bd; }
+        .last-day-star { color: #d39e00; font-weight: bold; }
+
+        .btn-group { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
+        button.primary { padding: 15px 40px; font-size: 18px; cursor: pointer; border: none; border-radius: 30px; background: #28a745; color: white; font-weight: bold; transition: 0.3s; }
+        button.sub { padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { opacity: 0.8; }
+
+        .stats-layout { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 25px; }
+        .stats-card { background: #fff; border: 1px solid #dee2e6; padding: 8px 12px; border-radius: 8px; text-align: center; min-width: 100px; }
+
+        @media print { .no-print { display: none !important; } .container { box-shadow: none; border: none; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 class="no-print">🗓 シフト管理システム</h1>
+
+    <div class="member-management no-print">
+        <h3>スタッフ管理</h3>
+        <div class="member-input">
+            <input type="text" id="newMemberName" class="txt-input" placeholder="スタッフ名を追加">
+            <button class="sub" onclick="addMember()">追加</button>
+        </div>
+        <div class="member-list" id="memberListArea"></div>
+    </div>
+
+    <div class="config-section no-print">
+        <input type="number" id="yearInput" value="2026" min="2025" onchange="init()">
+        <select id="monthInput" onchange="init()">
+            <option value="1">1月</option><option value="2" selected>2月</option>
+            <option value="3">3月</option><option value="4">4月</option>
+            <option value="5">5月</option><option value="6">6月</option>
+            <option value="7">7月</option><option value="8">8月</option>
+            <option value="9">9月</option><option value="10">10月</option>
+            <option value="11">11月</option><option value="12">12月</option>
+        </select>
+        <select id="periodInput" onchange="init()">
+            <option value="first" selected>前半 (1-15日)</option>
+            <option value="second">後半 (16日-末日)</option>
+        </select>
+    </div>
+
+    <h3 class="no-print">1. 希望入力（✓が出勤可能日）</h3>
+    <div class="table-wrapper no-print" id="inputGrid"></div>
+    
+    <div class="btn-group no-print">
+        <button class="primary" onclick="generateShift()">✨ シフトを作成（連勤禁止）</button>
+    </div>
+
+    <div id="resultArea" style="display:none;">
+        <hr class="no-print">
+        <h2 id="resultTitle">シフト結果</h2>
+        <div class="stats-layout" id="statsArea"></div>
+        <h3>出勤状況カレンダー</h3>
+        <div class="table-wrapper" id="calendarTableWrapper"></div>
+        <div class="btn-group no-print">
+            <button class="sub" style="background:#17a2b8" onclick="copyToClipboard()">📋 Excelに貼り付ける</button>
+            <button class="sub" style="background:#6c757d" onclick="window.print()">PDF/印刷として保存</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// 設定に基づいた初期スタッフ名
+let members = ['杉本', '小谷田', '藤井', '工藤', '澤井', '大間'];
+
+function addMember() {
+    const input = document.getElementById('newMemberName');
+    const name = input.value.trim();
+    if (name && !members.includes(name)) {
+        members.push(name);
+        input.value = '';
+        renderMemberList();
+        init();
+    }
+}
+
+function removeMember(name) {
+    if (members.length <= 3) {
+        alert("末日3名体制のため、最低3名の登録が必要です");
+        return;
+    }
+    members = members.filter(m => m !== name);
+    renderMemberList();
+    init();
+}
+
+function renderMemberList() {
+    const area = document.getElementById('memberListArea');
+    area.innerHTML = members.map(m => `
+        <div class="member-chip">
+            ${m} <button onclick="removeMember('${m}')">×</button>
+        </div>
+    `).join('');
+}
+
+function isHoliday(y, m, d) {
+    const h = { 1:[1], 2:[11, 23], 4:[29], 5:[3,4,5], 8:[11], 11:[3,23] };
+    if (h[m] && h[m].includes(d)) return true;
+    const dt = new Date(y, m-1, d), day = dt.getDay(), nth = Math.floor((d - 1) / 7) + 1;
+    if (day === 1 && ((m===1 && nth===2) || (m===7 && nth===3) || (m===9 && nth===3) || (m===10 && nth===2))) return true;
+    return false;
+}
+
+function init() {
+    const y = parseInt(document.getElementById('yearInput').value), m = parseInt(document.getElementById('monthInput').value);
+    const p = document.getElementById('periodInput').value;
+    const lastDay = new Date(y, m, 0).getDate();
+    const start = (p === 'first') ? 1 : 16, end = (p === 'first') ? 15 : lastDay;
+
+    let html = `<table><tr><th class="sticky-date">日付</th>`;
+    members.forEach(mName => html += `<th>${mName}</th>`);
+    html += `</tr>`;
+
+    for (let d = start; d <= end; d++) {
+        const dt = new Date(y, m-1, d), hol = isHoliday(y, m, d);
+        const dayIdx = dt.getDay();
+        const cls = (dayIdx === 0 || hol) ? 'sun' : (dayIdx === 6 ? 'sat' : '');
+        const isLast = (d === lastDay);
+        
+        html += `<tr class="${cls}">
+            <td class="sticky-date">${d}${"日月火水木金土"[dayIdx]}${isLast?'★':''}</td>`;
+        members.forEach(mName => {
+            const isWe = (dayIdx === 0 || dayIdx === 6 || hol);
+            // 澤井さん(旧E)と大間さん(旧F)の土日祝NGを初期設定
+            let checked = ((mName === '澤井' || mName === '大間') && isWe) ? "" : "checked";
+            html += `<td><input type="checkbox" id="check_${mName}_${d}" ${checked}></td>`;
+        });
+        html += `</tr>`;
+    }
+    document.getElementById('inputGrid').innerHTML = html + `</table>`;
+}
+
+function generateShift() {
+    const y = parseInt(document.getElementById('yearInput').value), m = parseInt(document.getElementById('monthInput').value);
+    const p = document.getElementById('periodInput').value;
+    const lastDay = new Date(y, m, 0).getDate();
+    const start = (p === 'first') ? 1 : 16, end = (p === 'first') ? 15 : lastDay;
+
+    let stats = {};
+    members.forEach(m1 => { stats[m1] = { total: 0, weekend: 0 }; });
+
+    let results = {};
+    let yesterdayWork = [];
+
+    for (let d = start; d <= end; d++) {
+        const isWe = (new Date(y, m-1, d).getDay() % 6 === 0 || isHoliday(y, m, d));
+        const required = (d === lastDay) ? 3 : 2;
+
+        let avail = members.filter(mName => document.getElementById(`check_${mName}_${d}`).checked);
+        let candidates = avail.filter(mName => !yesterdayWork.includes(mName));
+
+        if (candidates.length < required) candidates = avail; 
+        if (candidates.length < required) { alert(`${d}日の候補者が足りません`); return; }
+
+        candidates.sort((a, b) => (stats[a].total - stats[b].total) + Math.random());
+        
+        const selected = candidates.slice(0, required);
+        results[d] = selected;
+
+        selected.forEach(mName => {
+            stats[mName].total++;
+            if (isWe) stats[mName].weekend++;
+        });
+        yesterdayWork = selected;
+    }
+    renderResults(results, stats, start, end, y, m);
+}
+
+function renderResults(res, stats, start, end, y, m) {
+    document.getElementById('resultArea').style.display = 'block';
+    document.getElementById('resultTitle').innerText = `${y}年${m}月 シフト結果 (${start}-${end}日)`;
+    
+    let sHtml = '';
+    members.forEach(mName => sHtml += `<div class="stats-card"><b>${mName}さん</b><br>${stats[mName].total}回 / 土日${stats[mName].weekend}</div>`);
+    document.getElementById('statsArea').innerHTML = sHtml;
+
+    let cHtml = `<table id="shareTable"><tr><th class="sticky-date">日付</th>`;
+    members.forEach(mName => cHtml += `<th>${mName}</th>`);
+    cHtml += `</tr>`;
+
+    for (let d = start; d <= end; d++) {
+        const dt = new Date(y, m-1, d), hol = isHoliday(y, m, d);
+        const cls = (dt.getDay() === 0 || hol) ? 'sun' : (dt.getDay() === 6 ? 'sat' : '');
+        cHtml += `<tr class="${cls}"><td class="sticky-date">${d}${"日月火水木金土"[dt.getDay()]}</td>`;
+        members.forEach(mName => {
+            const work = res[d].includes(mName);
+            cHtml += `<td class="${work ? 'work-cell' : 'off-cell'}">${work ? '通' : '休'}</td>`;
+        });
+        cHtml += `</tr>`;
+    }
+    document.getElementById('calendarTableWrapper').innerHTML = cHtml + `</table>`;
+}
+
+function copyToClipboard() {
+    const table = document.getElementById("shareTable");
+    let text = "";
+    for (let i = 0; i < table.rows.length; i++) {
+        let row = [];
+        for (let j = 0; j < table.rows[i].cells.length; j++) { row.push(table.rows[i].cells[j].innerText); }
+        text += row.join("\t") + "\n";
+    }
+    navigator.clipboard.writeText(text).then(() => alert("Excel貼り付け用にコピーしました！"));
+}
+
+renderMemberList();
+init();
+</script>
+</body>
+</html>
