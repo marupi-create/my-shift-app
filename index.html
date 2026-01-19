@@ -297,4 +297,90 @@ function generateShift() {
         let candidates = avail.filter(mName => !yesterdayWork.includes(mName));
         if (candidates.length < required) candidates = avail; 
         
-        if (candidates.le
+        if (candidates.length < required) { 
+            alert(`${dt.getMonth()+1}/${dt.getDate()}の候補者が足りません（最低${required}名）`); 
+            return; 
+        }
+
+        candidates.sort((a, b) => (stats[a].total - stats[b].total) + (Math.random() - 0.5));
+        
+        const selected = candidates.slice(0, required);
+        results[dateKey] = selected;
+
+        selected.forEach(mName => {
+            stats[mName].total++;
+            if (isWe) stats[mName].weekend++;
+            stats[mName].wdCounts[dayIdx]++;
+        });
+        yesterdayWork = selected;
+    }
+    renderResults(results, stats, dates, y, m, p);
+}
+
+function renderResults(res, stats, dates, y, m, p) {
+    document.getElementById('resultArea').style.display = 'block';
+    
+    const pText = (p === 'first') ? "前半 (11-26日)" : "後半 (27-10日)";
+    document.getElementById('resultTitle').innerText = `${y}年${m}月度 ${pText} シフト結果`;
+    
+    const weekNames = ["日","月","火","水","木","金","土"];
+    let sHtml = '';
+    members.forEach(mName => {
+        const st = stats[mName];
+        let wdHtml = '';
+        st.wdCounts.forEach((count, idx) => {
+            if(count > 0) wdHtml += `<span>${weekNames[idx]}:${count}</span> `;
+        });
+
+        sHtml += `
+        <div class="stats-card">
+            <b>${mName}</b>
+            合計: ${st.total}回 <br>
+            <span style="font-size:16px">(土日祝 ${st.weekend})</span>
+            <hr style="margin:10px 0; border:0; border-top:2px dashed #ccc;">
+            <div style="font-size:16px; color:#444;">${wdHtml}</div>
+        </div>`;
+    });
+    document.getElementById('statsArea').innerHTML = sHtml;
+
+    let cHtml = `<table id="shareTable"><tr><th class="sticky-date">日付</th>`;
+    members.forEach(mName => cHtml += `<th>${mName}</th>`);
+    cHtml += `</tr>`;
+
+    dates.forEach(dt => {
+        const dateKey = `${dt.getFullYear()}-${dt.getMonth()+1}-${dt.getDate()}`;
+        const hol = isHoliday(dt);
+        const dayIdx = dt.getDay();
+        const dStr = `${dt.getMonth()+1}/${dt.getDate()}`;
+        const cls = (dayIdx === 0 || hol) ? 'sun' : (dayIdx === 6 ? 'sat' : '');
+        
+        cHtml += `<tr class="${cls}"><td class="sticky-date">${dStr} (${weekNames[dayIdx]})</td>`;
+        members.forEach(mName => {
+            const work = res[dateKey] && res[dateKey].includes(mName);
+            // 修正箇所：●以外（休み）のマスに・を表示して分かりやすく
+            cHtml += `<td class="${work ? 'work-cell' : 'off-cell'}">${work ? '●' : '・'}</td>`;
+        });
+        cHtml += `</tr>`;
+    });
+    document.getElementById('calendarTableWrapper').innerHTML = cHtml + `</table>`;
+    
+    document.getElementById('resultArea').scrollIntoView({behavior: "smooth"});
+}
+
+function copyToClipboard() {
+    const table = document.getElementById("shareTable");
+    let text = "";
+    for (let i = 0; i < table.rows.length; i++) {
+        let row = [];
+        for (let j = 0; j < table.rows[i].cells.length; j++) { row.push(table.rows[i].cells[j].innerText.replace('●','○').replace('・','')); }
+        text += row.join("\t") + "\n";
+    }
+    navigator.clipboard.writeText(text).then(() => alert("Excel貼り付け用にコピーしました！"));
+}
+
+// 初期化実行
+renderMemberList();
+init();
+</script>
+</body>
+</html>
