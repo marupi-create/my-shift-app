@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>シフト管理システム (3人体制 左配置版)</title>
+    <title>シフト管理システム (シェア機能付き)</title>
     <style>
         /* ベースの文字サイズを大きく設定 */
         body { 
@@ -74,7 +74,7 @@
             font-weight: bold; 
             z-index: 5; 
             font-size: 20px;
-            min-width: 200px; /* 幅を確保 */
+            min-width: 200px; 
             border-right: 3px solid #ccc;
         }
 
@@ -82,8 +82,8 @@
         .date-cell-inner {
             display: flex;
             align-items: center;
-            justify-content: flex-start; /* 左寄せ */
-            gap: 15px; /* チェックボックスと日付の間隔 */
+            justify-content: flex-start; 
+            gap: 15px; 
         }
 
         /* 土日祝の色分け */
@@ -97,26 +97,26 @@
             cursor: pointer;
         }
         
-        /* 3人体制スイッチのデザイン（左側配置用） */
+        /* 3人体制スイッチのデザイン */
         .req3-wrapper {
             display: flex;
-            flex-direction: column; /* チェックと文字を縦に積む */
+            flex-direction: column; 
             align-items: center;
             justify-content: center;
             background: #fff0f6;
-            border: 2px solid #fcc2d7; /* 枠線を少し太く */
+            border: 2px solid #fcc2d7; 
             padding: 5px 8px;
             border-radius: 6px;
             cursor: pointer;
             min-width: 50px;
         }
         .req3-wrapper input {
-            transform: scale(2.0); /* 少しだけ小さくしてバランス調整 */
+            transform: scale(2.0); 
             margin: 0 0 5px 0;
         }
         .req3-text {
             font-size: 12px;
-            color: #d63384; /* ピンク色 */
+            color: #d63384; 
             font-weight: bold;
             line-height: 1;
         }
@@ -139,6 +139,16 @@
             font-size: 18px; 
             background: #007bff; 
             color: white; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+        }
+        /* シェアボタン用のスタイル */
+        button.share-btn {
+            background: #00C300; /* LINEっぽい緑、または目立つ色 */
+            color: white;
+            padding: 15px 30px; 
+            font-size: 18px; 
             border: none; 
             border-radius: 8px; 
             cursor: pointer; 
@@ -172,7 +182,6 @@
             .no-print { display: none !important; } 
             .container { box-shadow: none; border: none; width: 100%; margin: 0; padding: 0; } 
             body { font-size: 14pt; }
-            /* 印刷時は3人チェックボックスを隠す（結果表で見ればOKなので） */
             .req3-wrapper { display: none; }
         }
     </style>
@@ -227,7 +236,7 @@
         <div class="table-wrapper" id="calendarTableWrapper"></div>
         <div class="btn-group no-print">
             <button class="sub" style="background:#17a2b8" onclick="copyToClipboard()">📋 Excel用にコピー</button>
-            <button class="sub" style="background:#6c757d" onclick="window.print()">🖨 印刷 / PDF保存</button>
+            <button class="share-btn" onclick="shareShift()">📤 LINE等で送る</button>
         </div>
     </div>
 </div>
@@ -303,7 +312,6 @@ function init() {
         const cls = (dayIdx === 0 || hol) ? 'sun' : (dayIdx === 6 ? 'sat' : '');
         const dateKey = `${dt.getFullYear()}-${dt.getMonth()+1}-${dt.getDate()}`;
 
-        // ▼修正箇所：Flexboxを使って「3人チェック」を左、「日付」を右に配置
         html += `<tr class="${cls}">
             <td class="sticky-date">
                 <div class="date-cell-inner">
@@ -342,7 +350,6 @@ function generateShift() {
         const dayIdx = dt.getDay();
         const isWe = (dayIdx === 0 || dayIdx === 6 || isHoliday(dt));
         
-        // 3人体制チェック確認
         const is3Required = document.getElementById(`req3_${dateKey}`).checked;
         const required = is3Required ? 3 : 2; 
 
@@ -437,6 +444,55 @@ function copyToClipboard() {
         text += row.join("\t") + "\n";
     }
     navigator.clipboard.writeText(text).then(() => alert("Excel貼り付け用にコピーしました！"));
+}
+
+// ▼新規追加：シェア機能
+function shareShift() {
+    const table = document.getElementById("shareTable");
+    if (!table) { alert("シフトがまだ作成されていません"); return; }
+    
+    // タイトル取得
+    let shareText = document.getElementById("resultTitle").innerText + "\n\n";
+    const rows = table.querySelectorAll("tr");
+    
+    // メンバー名取得（ヘッダー）
+    const headers = rows[0].querySelectorAll("th");
+    const memberNames = [];
+    for(let i=1; i<headers.length; i++) {
+        memberNames.push(headers[i].innerText);
+    }
+
+    // データ行の処理
+    for (let i = 1; i < rows.length; i++) {
+        const cells = rows[i].querySelectorAll("td");
+        if (cells.length === 0) continue;
+        
+        // 日付テキストの整形（"3人"という文字や改行を削除して綺麗にする）
+        let dateText = cells[0].innerText.replace('3人', '').replace(/\n/g, '').trim();
+        
+        // 担当者を取得
+        let assignedMembers = [];
+        for (let j = 1; j < cells.length; j++) {
+            if (cells[j].innerText.includes('●')) {
+                assignedMembers.push(memberNames[j-1]);
+            }
+        }
+        
+        // 行を追加 (例: "2/11 (水): 杉本, 小谷田")
+        shareText += `${dateText}: ${assignedMembers.join(', ')}\n`;
+    }
+
+    // シェア実行 (対応していなければクリップボードコピー)
+    if (navigator.share) {
+        navigator.share({
+            title: 'シフト結果',
+            text: shareText
+        }).catch((error) => console.log('シェアキャンセル', error));
+    } else {
+        navigator.clipboard.writeText(shareText).then(() => {
+            alert("この端末はシェア機能に対応していません。\n代わりにテキストをコピーしました！");
+        });
+    }
 }
 
 renderMemberList();
