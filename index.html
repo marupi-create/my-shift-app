@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>シフト管理システム (大きな文字版)</title>
+    <title>シフト管理システム (3人体制 左配置版)</title>
     <style>
         /* ベースの文字サイズを大きく設定 */
         body { 
@@ -21,7 +21,7 @@
             box-shadow: 0 5px 20px rgba(0,0,0,0.1); 
         }
         
-        /* タイトルエリア（アイコン削除） */
+        /* タイトルエリア */
         h1 { font-size: 32px; text-align: center; margin-bottom: 30px; color: #2c3e50; }
         
         h2 { font-size: 28px; border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-top: 40px; }
@@ -65,17 +65,60 @@
             vertical-align: middle;
         }
         th { background: #e9ecef; font-weight: bold; position: sticky; top: 0; z-index: 10; font-size: 20px; }
-        .sticky-date { position: sticky; left: 0; background: #e9ecef; font-weight: bold; z-index: 5; font-size: 20px; }
+        
+        /* 日付カラムの設定 */
+        .sticky-date { 
+            position: sticky; 
+            left: 0; 
+            background: #e9ecef; 
+            font-weight: bold; 
+            z-index: 5; 
+            font-size: 20px;
+            min-width: 200px; /* 幅を確保 */
+            border-right: 3px solid #ccc;
+        }
+
+        /* 日付セルの中身を横並びにするレイアウト */
+        .date-cell-inner {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start; /* 左寄せ */
+            gap: 15px; /* チェックボックスと日付の間隔 */
+        }
 
         /* 土日祝の色分け */
         .sat { color: #0044cc; background: #eef6ff; font-weight: bold; }
         .sun, .hol { color: #cc0000; background: #ffebeb; font-weight: bold; }
 
-        /* チェックボックスの巨大化 */
+        /* 通常のチェックボックスの巨大化 */
         input[type="checkbox"] {
             transform: scale(2.5); 
             margin: 10px;
             cursor: pointer;
+        }
+        
+        /* 3人体制スイッチのデザイン（左側配置用） */
+        .req3-wrapper {
+            display: flex;
+            flex-direction: column; /* チェックと文字を縦に積む */
+            align-items: center;
+            justify-content: center;
+            background: #fff0f6;
+            border: 2px solid #fcc2d7; /* 枠線を少し太く */
+            padding: 5px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            min-width: 50px;
+        }
+        .req3-wrapper input {
+            transform: scale(2.0); /* 少しだけ小さくしてバランス調整 */
+            margin: 0 0 5px 0;
+        }
+        .req3-text {
+            font-size: 12px;
+            color: #d63384; /* ピンク色 */
+            font-weight: bold;
+            line-height: 1;
         }
 
         /* ボタンデザイン */
@@ -106,7 +149,7 @@
         .work-cell { 
             color: #28a745; 
             font-weight: 900; 
-            font-size: 42px; /* ←ここを大きく変更 */
+            font-size: 42px;
             line-height: 1;
         } 
         .off-cell { color: #ddd; font-size: 20px; }
@@ -129,6 +172,8 @@
             .no-print { display: none !important; } 
             .container { box-shadow: none; border: none; width: 100%; margin: 0; padding: 0; } 
             body { font-size: 14pt; }
+            /* 印刷時は3人チェックボックスを隠す（結果表で見ればOKなので） */
+            .req3-wrapper { display: none; }
         }
     </style>
 </head>
@@ -164,7 +209,7 @@
         </select>
     </div>
 
-    <h3 class="no-print">1. 出勤できる日にチェックを入れてください</h3>
+    <h3 class="no-print">1. 出勤できる日にチェック（3人必要な日は「3人」をチェック）</h3>
     <div class="table-wrapper no-print" id="inputGrid"></div>
     
     <div class="btn-group no-print">
@@ -258,8 +303,17 @@ function init() {
         const cls = (dayIdx === 0 || hol) ? 'sun' : (dayIdx === 6 ? 'sat' : '');
         const dateKey = `${dt.getFullYear()}-${dt.getMonth()+1}-${dt.getDate()}`;
 
+        // ▼修正箇所：Flexboxを使って「3人チェック」を左、「日付」を右に配置
         html += `<tr class="${cls}">
-            <td class="sticky-date">${dStr} (${"日月火水木金土"[dayIdx]})</td>`;
+            <td class="sticky-date">
+                <div class="date-cell-inner">
+                    <label class="req3-wrapper">
+                        <input type="checkbox" id="req3_${dateKey}">
+                        <span class="req3-text">3人</span>
+                    </label>
+                    <span>${dStr} (${"日月火水木金土"[dayIdx]})</span>
+                </div>
+            </td>`;
         members.forEach(mName => {
             html += `<td><input type="checkbox" id="check_${mName}_${dateKey}"></td>`;
         });
@@ -287,7 +341,10 @@ function generateShift() {
         const dateKey = `${dt.getFullYear()}-${dt.getMonth()+1}-${dt.getDate()}`;
         const dayIdx = dt.getDay();
         const isWe = (dayIdx === 0 || dayIdx === 6 || isHoliday(dt));
-        const required = 2; 
+        
+        // 3人体制チェック確認
+        const is3Required = document.getElementById(`req3_${dateKey}`).checked;
+        const required = is3Required ? 3 : 2; 
 
         let avail = members.filter(mName => {
             const el = document.getElementById(`check_${mName}_${dateKey}`);
@@ -298,7 +355,7 @@ function generateShift() {
         if (candidates.length < required) candidates = avail; 
         
         if (candidates.length < required) { 
-            alert(`${dt.getMonth()+1}/${dt.getDate()}の候補者が足りません（最低${required}名）`); 
+            alert(`${dt.getMonth()+1}/${dt.getDate()}の候補者が足りません。\n(${required}名必要ですが、${candidates.length}名しかいません)`); 
             return; 
         }
 
@@ -354,10 +411,12 @@ function renderResults(res, stats, dates, y, m, p) {
         const dStr = `${dt.getMonth()+1}/${dt.getDate()}`;
         const cls = (dayIdx === 0 || hol) ? 'sun' : (dayIdx === 6 ? 'sat' : '');
         
-        cHtml += `<tr class="${cls}"><td class="sticky-date">${dStr} (${weekNames[dayIdx]})</td>`;
+        const is3 = document.getElementById(`req3_${dateKey}`).checked;
+        const marker = is3 ? '<br><span style="color:#d63384; font-size:14px;">(3人)</span>' : '';
+
+        cHtml += `<tr class="${cls}"><td class="sticky-date">${dStr} (${weekNames[dayIdx]})${marker}</td>`;
         members.forEach(mName => {
             const work = res[dateKey] && res[dateKey].includes(mName);
-            // 修正箇所：●以外（休み）のマスに・を表示して分かりやすく
             cHtml += `<td class="${work ? 'work-cell' : 'off-cell'}">${work ? '●' : '・'}</td>`;
         });
         cHtml += `</tr>`;
@@ -372,13 +431,14 @@ function copyToClipboard() {
     let text = "";
     for (let i = 0; i < table.rows.length; i++) {
         let row = [];
-        for (let j = 0; j < table.rows[i].cells.length; j++) { row.push(table.rows[i].cells[j].innerText.replace('●','○').replace('・','')); }
+        for (let j = 0; j < table.rows[i].cells.length; j++) { 
+            row.push(table.rows[i].cells[j].innerText.replace('●','○').replace('・','').replace('(3人)','')); 
+        }
         text += row.join("\t") + "\n";
     }
     navigator.clipboard.writeText(text).then(() => alert("Excel貼り付け用にコピーしました！"));
 }
 
-// 初期化実行
 renderMemberList();
 init();
 </script>
